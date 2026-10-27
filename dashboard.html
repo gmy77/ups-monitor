@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UPS Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#070b14; --card:#0f1626; --card2:#121b2e; --bordo:#1f2b44; --testo:#e6edf7; --muto:#8193b2; --debole:#56688a;
+  --blu:#4fa3ff; --ciano:#2fd4c6; --verde:#3ddc84; --giallo:#ffc24b; --arancio:#ff8a3d; --rosso:#ff4d5e; --viola:#9b7bff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--testo);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+body{background:
+  radial-gradient(1100px 520px at 8% -8%,#15305a66 0,transparent 60%),
+  radial-gradient(900px 480px at 100% 0%,#34205a55 0,transparent 55%),
+  radial-gradient(1000px 600px at 50% 120%,#0d3b3a44 0,transparent 60%), var(--bg);
+  min-height:100vh}
+.contenitore{max-width:1500px;margin:0 auto;padding:18px 16px 40px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;margin-bottom:16px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .icona{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;
+  background:linear-gradient(135deg,#2f80ed,#7b5cff);box-shadow:0 6px 24px #4f6bff55}
+.logo h1{margin:0;font-size:19px;font-weight:650;letter-spacing:.2px}
+.logo small{color:var(--muto)}
+.spazio{flex:1}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;font-weight:600;font-size:13px;border:1px solid}
+.pill .pallino{width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+.pill.ok{color:var(--verde);background:#3ddc8414;border-color:#3ddc8440}
+.pill.ko{color:var(--rosso);background:#ff4d5e18;border-color:#ff4d5e55;animation:pulsa 1.2s infinite}
+.pill.grigio{color:var(--muto);background:#ffffff08;border-color:var(--bordo)}
+@keyframes pulsa{50%{box-shadow:0 0 0 6px #ff4d5e22}}
+.meta{color:var(--muto);font-size:12.5px;text-align:right}
+.meta a{color:var(--muto)}
+.banner{display:none;margin-bottom:16px;padding:16px 20px;border-radius:16px;border:1px solid #ff4d5e66;
+  background:linear-gradient(90deg,#3a0d16,#26101c 60%,#1a1222);box-shadow:0 0 40px #ff4d5e22}
+.banner.visibile{display:flex;flex-wrap:wrap;gap:10px 30px;align-items:center}
+.banner b{font-size:18px;color:#ff8a95}
+.banner .timer{font:700 30px/1 "Cascadia Mono",Consolas,monospace;color:#fff}
+.banner span{color:#e9b7be}
+.griglia{display:grid;gap:14px}
+.kpi{grid-template-columns:repeat(4,1fr)}
+.piccoli{grid-template-columns:repeat(8,1fr);margin-top:14px}
+.card{background:linear-gradient(165deg,var(--card2),var(--card));border:1px solid var(--bordo);border-radius:16px;padding:16px;position:relative;overflow:hidden}
+.card h3{margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--muto)}
+.kpi .card{display:flex;align-items:center;gap:16px;min-height:150px}
+.anello{width:118px;height:118px;flex:none;position:relative}
+.anello svg{width:100%;height:100%;transform:rotate(135deg)}
+.anello .centro{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.anello .val{font-size:26px;font-weight:700;line-height:1}
+.anello .unita{font-size:12px;color:var(--muto)}
+.kpi .dettagli{flex:1;min-width:0}
+.kpi .grande{font-size:30px;font-weight:700;line-height:1.1}
+.kpi .grande small{font-size:15px;color:var(--muto);font-weight:500}
+.kpi .riga{display:flex;justify-content:space-between;color:var(--muto);font-size:12.5px;margin-top:4px}
+.kpi .riga b{color:var(--testo);font-weight:600}
+.barra{position:relative;height:8px;border-radius:5px;margin:14px 0 6px;
+  background:linear-gradient(90deg,var(--rosso) 0 6%,var(--giallo) 6% 14%,var(--verde) 14% 86%,var(--giallo) 86% 94%,var(--rosso) 94%)}
+.barra .indice{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff;transform:translateX(-2px);transition:left .6s}
+.tile{padding:13px 14px}
+.tile h3{margin-bottom:6px;font-size:10.5px}
+.tile .v{font-size:19px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .s{font-size:11.5px;color:var(--muto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sezione{display:flex;align-items:center;gap:12px;margin:26px 2px 12px}
+.sezione h2{margin:0;font-size:16px;font-weight:650}
+.sezione .linea{flex:1;height:1px;background:linear-gradient(90deg,var(--bordo),transparent)}
+.bottoni{display:flex;gap:4px;background:#0b1120;border:1px solid var(--bordo);border-radius:10px;padding:3px}
+.bottoni button,.btn{border:0;background:transparent;color:var(--muto);padding:6px 12px;border-radius:7px;cursor:pointer;font:inherit;font-size:12.5px}
+.bottoni button.attivo{background:linear-gradient(90deg,#2f80ed,#7b5cff);color:#fff}
+.btn{border:1px solid var(--bordo);background:#0b1120;color:var(--testo);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--blu)}
+.grafici{grid-template-columns:repeat(2,1fr)}
+.grafico{height:240px}
+.grafico.basso{height:200px}
+.stat{grid-template-columns:repeat(5,1fr)}
+.stat .v{font-size:24px;font-weight:700}
+.stat .s{color:var(--muto);font-size:12px}
+.interr{grid-template-columns:1.5fr 1fr}
+.tabella{max-height:420px;overflow:auto;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:#111a2c;color:var(--muto);font-weight:600;text-align:left;padding:9px 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;z-index:1}
+td{padding:8px 10px;border-top:1px solid #1a2438;white-space:nowrap}
+tr:hover td{background:#ffffff05}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.durata{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:600;font-size:12px}
+.d0{background:#4fa3ff1f;color:#8cc4ff}.d1{background:#ffc24b1f;color:var(--giallo)}.d2{background:#ff8a3d24;color:var(--arancio)}.d3{background:#ff4d5e24;color:#ff8a95}
+.vuoto{padding:30px;text-align:center;color:var(--debole)}
+.flags{grid-template-columns:repeat(4,1fr);gap:8px}
+.flag{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;background:#0b1120;border:1px solid #1a2438;font-size:12.5px;color:var(--muto)}
+.flag i{width:9px;height:9px;border-radius:50%;background:#2a3650;flex:none}
+.flag.on{color:var(--testo)}
+.flag.on.buono i{background:var(--verde);box-shadow:0 0 8px var(--verde)}
+.flag.on.cattivo{border-color:#ff4d5e55;background:#2a0f17}
+.flag.on.cattivo i{background:var(--rosso);box-shadow:0 0 8px var(--rosso)}
+.flag.on.info i{background:var(--blu);box-shadow:0 0 8px var(--blu)}
+.tre{grid-template-columns:1.2fr 1fr 1fr}
+.eventi{max-height:330px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.evento{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:10px;background:#0b1120;font-size:13px}
+.evento .quando{color:var(--debole);font-size:11.5px;white-space:nowrap;min-width:96px}
+.evento i{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}
+.critico i{background:var(--rosso)}.avviso i{background:var(--giallo)}.ok i{background:var(--verde)}.info i{background:var(--blu)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:13px}
+dt{color:var(--muto)}dd{margin:0;text-align:right;font-weight:550}
+details{margin-top:14px}
+summary{cursor:pointer;color:var(--muto);padding:6px 2px}
+#filtro{width:100%;margin:8px 0;padding:9px 12px;border-radius:9px;border:1px solid var(--bordo);background:#0b1120;color:var(--testo);font:inherit}
+code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px}
+.errore{display:none;margin-bottom:16px;padding:12px 16px;border-radius:12px;background:#2a1a0a;border:1px solid #ffc24b55;color:var(--giallo)}
+.errore.visibile{display:block}
+@media (max-width:1200px){.kpi{grid-template-columns:repeat(2,1fr)}.piccoli{grid-template-columns:repeat(4,1fr)}.stat{grid-template-columns:repeat(3,1fr)}.tre{grid-template-columns:1fr 1fr}.flags{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:820px){.grafici,.interr,.tre{grid-template-columns:1fr}.flags{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.kpi{grid-template-columns:1fr}.piccoli{grid-template-columns:repeat(2,1fr)}.stat{grid-template-columns:repeat(2,1fr)}.meta{text-align:left}
+  .anello{width:100px;height:100px}.kpi .grande{font-size:25px}}
+</style>
+</head>
+<body>
+<div class="contenitore">
+  <header>
+    <div class="logo">
+      <div class="icona">⚡</div>
+      <div><h1 id="modello">UPS Monitor</h1><small id="sottotitolo">in attesa di dati…</small></div>
+    </div>
+    <span class="pill grigio" id="pill"><span class="pallino"></span><span id="pillTesto">Connessione…</span></span>
+    <div class="spazio"></div>
+    <div class="meta"><div id="aggiornato">—</div><div id="serverInfo"></div></div>
+  </header>
+
+  <div class="errore" id="errore"></div>
+
+  <div class="banner" id="banner">
+    <div><b>⚠ BLACKOUT IN CORSO</b><br><span id="bannerCausa"></span></div>
+    <div><span>A batteria da</span><div class="timer" id="bannerTimer">0:00</div></div>
+    <div><span>Carica</span><div class="timer" id="bannerCarica">—</div></div>
+    <div><span>Autonomia stimata</span><div class="timer" id="bannerAutonomia">—</div></div>
+    <div><span id="bannerSpegniTesto">Spegnimento PC tra</span><div class="timer" id="bannerSpegni">—</div></div>
+  </div>
+
+  <div class="griglia kpi">
+    <div class="card">
+      <div class="anello" id="anelloCarica"></div>
+      <div class="dettagli">
+        <h3>Batteria</h3>
+        <div class="grande" id="vbat">—<small> V</small></div>
+        <div class="riga"><span>Stato</span><b id="statoBatt">—</b></div>
+        <div class="riga"><span>Nominale</span><b id="vbatNom">—</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="anello" id="anelloCarico"></div>
+      <div class="dettagli">
+        <h3>Potenza assorbita</h3>
+        <div class="grande" id="watt">—<small> W</small></div>
+        <div class="riga"><span>Massimo UPS</span><b id="wattMax">—</b></div>
+        <div class="riga"><span>Picco 24 h</span><b id="wattPicco">—</b></div>
+      </div>
+    </div>
+    <div class="card" style="display:block">
+      <h3>Tensione di rete</h3>
+      <div class="grande" id="vin">—<small> V</small></div>
+      <div class="barra"><div class="indice" id="indiceVin" style="left:50%"></div></div>
+      <div class="riga"><span id="sogliaBassa">—</span><span>nominale <b id="vinNom">—</b></span><span id="sogliaAlta">—</span></div>
+      <div class="riga"><span>Min / max 24 h</span><b id="vinMinMax">—</b></div>
+    </div>
+    <div class="card">
+      <div class="anello" id="anelloAutonomia"></div>
+      <div class="dettagli">
+        <h3>Autonomia</h3>
+        <div class="grande" id="autonomia">—</div>
+        <div class="riga"><span>Al carico attuale</span><b id="autonomiaW">—</b></div>
+        <div class="riga"><span>Spegnimento sotto</span><b id="autonomiaSoglia">—</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="griglia piccoli">
+    <div class="card tile"><h3>Uscita</h3><div class="v" id="vout">—</div><div class="s">tensione verso i carichi</div></div>
+    <div class="card tile"><h3>Frequenza</h3><div class="v" id="freq">—</div><div class="s">uscita</div></div>
+    <div class="card tile"><h3>Temperatura</h3><div class="v" id="temp">—</div><div class="s">batteria (sensore UPS)</div></div>
+    <div class="card tile"><h3>Età batteria</h3><div class="v" id="eta">—</div><div class="s" id="dataBatt">—</div></div>
+    <div class="card tile"><h3>Autotest</h3><div class="v" id="test">—</div><div class="s">ultimo esito</div></div>
+    <div class="card tile"><h3>Ultimo intervento</h3><div class="v" id="trasf" style="font-size:14px;white-space:normal;line-height:1.25">—</div></div>
+    <div class="card tile"><h3>Sensibilità</h3><div class="v" id="sens">—</div><div class="s">risposta ai disturbi</div></div>
+    <div class="card tile"><h3>Allarme</h3><div class="v" id="allarme">—</div><div class="s">cicalino</div></div>
+  </div>
+
+  <div class="sezione"><h2>Andamento</h2><div class="linea"></div>
+    <div class="bottoni" id="intervallo">
+      <button data-s="900">15 min</button><button data-s="3600" class="attivo">1 h</button>
+      <button data-s="21600">6 h</button><button data-s="86400">24 h</button>
+    </div>
+  </div>
+  <div class="griglia grafici">
+    <div class="card"><h3>Tensione di rete (V) · fasce rosse = blackout</h3><div class="grafico"><canvas id="gVin"></canvas></div></div>
+    <div class="card"><h3>Potenza assorbita (W)</h3><div class="grafico"><canvas id="gW"></canvas></div></div>
+    <div class="card"><h3>Batteria · carica (%) e tensione (V)</h3><div class="grafico"><canvas id="gBatt"></canvas></div></div>
+    <div class="card"><h3>Autonomia stimata (min)</h3><div class="grafico"><canvas id="gRun"></canvas></div></div>
+  </div>
+
+  <div class="sezione"><h2>Storico interruzioni</h2><div class="linea"></div>
+    <div class="bottoni" id="periodo">
+      <button data-g="7">7 gg</button><button data-g="30" class="attivo">30 gg</button>
+      <button data-g="365">Anno</button><button data-g="0">Tutto</button>
+    </div>
+    <a class="btn" href="interruzioni.csv">⬇ Esporta CSV</a>
+  </div>
+  <div class="griglia stat">
+    <div class="card"><h3>Interruzioni</h3><div class="v" id="sNum">0</div><div class="s" id="sNumS">nel periodo</div></div>
+    <div class="card"><h3>Tempo a batteria</h3><div class="v" id="sTot">0 s</div><div class="s">totale nel periodo</div></div>
+    <div class="card"><h3>La più lunga</h3><div class="v" id="sMax">—</div><div class="s" id="sMaxS">—</div></div>
+    <div class="card"><h3>Durata media</h3><div class="v" id="sMed">—</div><div class="s">per interruzione</div></div>
+    <div class="card"><h3>L'ultima</h3><div class="v" id="sUlt" style="font-size:18px">—</div><div class="s" id="sUltS">—</div></div>
+  </div>
+  <div class="griglia interr" style="margin-top:14px">
+    <div class="card">
+      <h3>Elenco</h3>
+      <div class="tabella"><table>
+        <thead><tr><th>Inizio</th><th>Fine</th><th>Durata</th><th>Causa</th><th class="num">Carica min</th><th class="num">Carico max</th><th class="num">Rete prima</th></tr></thead>
+        <tbody id="tInterr"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3 id="titoloBarre">Interruzioni per giorno</h3>
+      <div class="grafico" style="height:180px"><canvas id="gGiorni"></canvas></div>
+      <h3 style="margin-top:14px">Per causa</h3>
+      <div id="cause"></div>
+    </div>
+  </div>
+
+  <div class="sezione"><h2>Stato e dettagli</h2><div class="linea"></div></div>
+  <div class="griglia tre">
+    <div class="card"><h3>Indicatori</h3><div class="griglia flags" id="flags"></div></div>
+    <div class="card"><h3>Eventi recenti</h3><div class="eventi" id="eventi"></div></div>
+    <div class="card"><h3>UPS</h3><dl id="info"></dl></div>
+  </div>
+
+  <details class="card" style="margin-top:14px">
+    <summary>Tutti i valori grezzi letti via HID (<span id="nGrezzi">0</span>)</summary>
+    <input id="filtro" placeholder="Filtra (es. Voltage, Battery, 0xFF86)…">
+    <div class="tabella" style="max-height:500px"><table><thead><tr><th>Usage HID</th><th class="num">Valore</th></tr></thead><tbody id="tGrezzi"></tbody></table></div>
+  </details>
+</div>
+
+<script>
+"use strict";
+const PROTETTO = "{{PROTETTO}}" === "1";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 0) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("it-IT", {minimumFractionDigits: d, maximumFractionDigits: d});
+const pad = n => String(n).padStart(2, "0");
+function durata(s) {
+  if (s == null || isNaN(s)) return "—";
+  s = Math.round(s);
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min " + (s % 60) + " s";
+  if (s < 86400) return Math.floor(s / 3600) + " h " + Math.floor(s % 3600 / 60) + " min";
+  return Math.floor(s / 86400) + " g " + Math.floor(s % 86400 / 3600) + " h";
+}
+const orologio = s => s == null ? "—" : Math.floor(s / 60) + ":" + pad(Math.round(s % 60));
+const oraBreve = ts => { const d = new Date(ts * 1000); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+const dataOra = ts => new Date(ts * 1000).toLocaleString("it-IT", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"});
+const parseData = s => s ? new Date(s.replace(" ", "T")).getTime() / 1000 : null;
+
+async function prendi(url) {
+  const r = await fetch(url, {cache: "no-store"});
+  if (r.status === 401) { location.href = "/login"; throw new Error("non autenticato"); }
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+// --- Anelli -------------------------------------------------------------------
+function anello(id, pct, testo, unita, colori) {
+  const r = 52, c = 2 * Math.PI * r, arco = c * 0.75, p = Math.max(0, Math.min(100, pct ?? 0)) / 100;
+  const g = "g" + id;
+  $(id).innerHTML = `<svg viewBox="0 0 120 120"><defs><linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="${colori[0]}"/><stop offset="1" stop-color="${colori[1]}"/></linearGradient></defs>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="#1c2740" stroke-width="10" stroke-linecap="round" stroke-dasharray="${arco} ${c}"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="url(#${g})" stroke-width="10" stroke-linecap="round"
+      stroke-dasharray="${arco * p} ${c}" style="transition:stroke-dasharray .6s;filter:drop-shadow(0 0 6px ${colori[1]}88)"/></svg>
+    <div class="centro"><div><div class="val">${testo}</div><div class="unita">${unita}</div></div></div>`;
+}
+const coloreLivello = (p, inverso) => {
+  const v = inverso ? 100 - p : p;
+  return v > 60 ? [css("--ciano"), css("--verde")] : v > 30 ? [css("--giallo"), css("--arancio")] : [css("--arancio"), css("--rosso")];
+};
+
+// --- Grafici --------------------------------------------------------------------
+Chart.defaults.color = "#8193b2";
+Chart.defaults.font.family = "Segoe UI, system-ui, sans-serif";
+Chart.defaults.borderColor = "#1a2438";
+const pluginBande = {
+  id: "bande",
+  beforeDatasetsDraw(c) {
+    const b = c.$bande || [], {ctx, chartArea: a, scales: {x}} = c;
+    ctx.save();
+    for (const [t0, t1] of b) {
+      const x0 = Math.max(a.left, x.getPixelForValue(t0)), x1 = Math.min(a.right, x.getPixelForValue(t1));
+      if (x1 <= x0) continue;
+      const gr = ctx.createLinearGradient(0, a.top, 0, a.bottom);
+      gr.addColorStop(0, "rgba(255,77,94,.28)"); gr.addColorStop(1, "rgba(255,77,94,.06)");
+      ctx.fillStyle = gr;
+      ctx.fillRect(x0, a.top, Math.max(2, x1 - x0), a.bottom - a.top);
+    }
+    ctx.restore();
+  }
+};
+function riempimento(colore) {
+  return ctx => {
+    const {chart} = ctx; if (!chart.chartArea) return "transparent";
+    const g = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
+    g.addColorStop(0, colore + "55"); g.addColorStop(1, colore + "00"); return g;
+  };
+}
+function serie(label, colore, extra = {}) {
+  return {label, data: [], borderColor: colore, backgroundColor: riempimento(colore), fill: true,
+          borderWidth: 2, pointRadius: 0, tension: .3, spanGaps: false, ...extra};
+}
+function grafico(id, datasets, scale = {}) {
+  return new Chart($(id), {
+    type: "line", data: {datasets}, plugins: [pluginBande],
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false, parsing: false, normalized: true,
+      interaction: {mode: "index", intersect: false},
+      plugins: {
+        legend: {display: datasets.length > 1 && !datasets.every(d => d.soglia), labels: {boxWidth: 10, filter: i => !datasets[i.datasetIndex].soglia}},
+        tooltip: {backgroundColor: "#0b1120ee", borderColor: "#2b3a58", borderWidth: 1, filter: i => !i.dataset.soglia,
+                  callbacks: {title: i => i.length ? dataOra(i[0].parsed.x) : ""}}
+      },
+      scales: {
+        x: {type: "linear", ticks: {callback: v => oraBreve(v), maxTicksLimit: 8}, grid: {color: "#141d30"}},
+        y: {grid: {color: "#141d30"}, ...scale.y},
+        ...(scale.y1 ? {y1: {position: "right", grid: {display: false}, ...scale.y1}} : {})
+      }
+    }
+  });
+}
+const G = {
+  vin: grafico("gVin", [serie("Rete", css("--blu")),
+    {label: "Soglia bassa", data: [], borderColor: "#ff4d5e88", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, soglia: true},
+    {label: "Soglia alta", data: [], borderColor: "#ff4d5e88", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, soglia: true}]),
+  w: grafico("gW", [serie("Watt", css("--viola"))], {y: {beginAtZero: true}}),
+  batt: grafico("gBatt", [serie("Carica %", css("--verde")), serie("Tensione V", css("--giallo"), {fill: false, yAxisID: "y1", borderWidth: 1.5})],
+                {y: {min: 0, max: 100}, y1: {}}),
+  run: grafico("gRun", [serie("Autonomia", css("--ciano"))], {y: {beginAtZero: true}}),
+};
+const gGiorni = new Chart($("gGiorni"), {
+  type: "bar", data: {labels: [], datasets: [{label: "Interruzioni", data: [], borderRadius: 4,
+    backgroundColor: c => { const g = c.chart.ctx.createLinearGradient(0, 0, 0, 180); g.addColorStop(0, "#ff8a3d"); g.addColorStop(1, "#ff4d5e55"); return g; }}]},
+  options: {animation: false, responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false},
+    tooltip: {callbacks: {label: i => i.raw + " interruzioni"}}},
+    scales: {y: {beginAtZero: true, ticks: {precision: 0}, grid: {color: "#141d30"}}, x: {grid: {display: false}, ticks: {maxTicksLimit: 10}}}}
+});
+
+// --- Stato ------------------------------------------------------------------------
+let regola = null, storico = [], ultimoTs = 0, finestra = 3600, info = {}, interruzioni = [], periodo = 30, inCorso = null, intervalloServer = 2;
+
+const FLAG = [
+  ["rete", "Rete presente", "buono"], ["batteria_presente", "Batteria presente", "buono"],
+  ["in_carica", "In carica", "info"], ["in_scarica", "In scarica", "cattivo"],
+  ["batteria_bassa", "Batteria bassa", "cattivo"], ["autonomia_esaurita", "Autonomia esaurita", "cattivo"],
+  ["sovraccarico", "Sovraccarico", "cattivo"], ["sostituire_batteria", "Sostituire batteria", "cattivo"],
+  ["spegnimento_imminente", "Spegnimento imminente", "cattivo"], ["spegnimento_richiesto", "Spegnimento richiesto", "cattivo"],
+  ["comunicazione_persa", "Comunicazione persa", "cattivo"], ["tensione_non_regolata", "Tensione non regolata", "cattivo"],
+];
+
+function aggiornaStato(r) {
+  intervalloServer = r.server?.intervallo ?? 2;
+  $("serverInfo").innerHTML = `in funzione da ${durata(Date.now() / 1000 - r.server.avvio)} · ${fmt(r.server.campioni)} letture` +
+    (PROTETTO ? ` · <a href="/logout">esci</a>` : "");
+  $("errore").classList.toggle("visibile", !!r.errore);
+  $("errore").textContent = r.errore ? "⚠ " + r.errore : "";
+  inCorso = r.interruzione_in_corso;
+  regola = r.spegnimento;
+  disegnaEventi(r.eventi || []);
+  const d = r.dati;
+  if (!d) { $("pill").className = "pill grigio"; $("pillTesto").textContent = "UPS non raggiungibile"; return; }
+  const m = d.misure, s = d.stato; info = d.info;
+
+  $("modello").textContent = `${info.produttore === "American Power Conversion" ? "APC " : ""}${info.modello ?? "UPS"}`;
+  $("sottotitolo").textContent = `S/N ${info.seriale ?? "—"} · ${info.potenza_nominale_w ?? "?"} W · batteria ${info.chimica ?? ""} ${info.tensione_batteria_nominale ?? ""} V`;
+  $("aggiornato").textContent = "Aggiornato " + new Date(d.ts * 1000).toLocaleTimeString("it-IT");
+  const pill = $("pill");
+  if (s.rete) { pill.className = "pill ok"; $("pillTesto").textContent = s.in_carica ? "Rete OK · in carica" : "Rete OK"; }
+  else { pill.className = "pill ko"; $("pillTesto").textContent = "A BATTERIA"; }
+
+  // Batteria
+  anello("anelloCarica", m.carica_pct, fmt(m.carica_pct), "% carica", coloreLivello(m.carica_pct));
+  $("vbat").innerHTML = `${fmt(m.tensione_batteria, 2)}<small> V</small>`;
+  $("statoBatt").textContent = s.sostituire_batteria ? "Da sostituire" : s.in_scarica ? "In scarica" : s.in_carica ? "In carica" : "Carica";
+  $("vbatNom").textContent = fmt(info.tensione_batteria_nominale) + " V";
+  // Carico
+  anello("anelloCarico", m.carico_pct, fmt(m.carico_pct), "% carico", coloreLivello(m.carico_pct, true));
+  $("watt").innerHTML = `${fmt(m.carico_w)}<small> W</small>`;
+  $("wattMax").textContent = fmt(info.potenza_nominale_w) + " W";
+  // Rete
+  const lo = info.soglia_bassa_v ?? 196, hi = info.soglia_alta_v ?? 256, span = (hi - lo) / 0.72;
+  const base = lo - span * 0.14;
+  $("vin").innerHTML = `${s.rete ? fmt(m.tensione_ingresso) : "0"}<small> V</small>`;
+  $("indiceVin").style.left = Math.max(0, Math.min(100, ((s.rete ? m.tensione_ingresso : 0) - base) / span * 100)) + "%";
+  $("sogliaBassa").textContent = "↓ " + fmt(lo) + " V"; $("sogliaAlta").textContent = fmt(hi) + " V ↑";
+  $("vinNom").textContent = fmt(info.tensione_nominale) + " V";
+  // Autonomia
+  const minuti = (m.autonomia_s ?? 0) / 60, maxRun = Math.max(...storico.map(p => p.run || 0), m.autonomia_s || 0, 1);
+  anello("anelloAutonomia", (m.autonomia_s || 0) / maxRun * 100, fmt(minuti), "minuti", coloreLivello(m.carica_pct));
+  $("autonomia").textContent = orologio(m.autonomia_s);
+  $("autonomiaW").textContent = fmt(m.carico_w) + " W";
+  $("autonomiaSoglia").textContent = `${fmt(info.soglia_batteria_bassa_pct)} % o ${orologio(info.soglia_autonomia_s)}`;
+  // Piccoli
+  $("vout").textContent = fmt(m.tensione_uscita) + " V";
+  $("freq").textContent = fmt(m.frequenza, 1) + " Hz";
+  $("temp").textContent = fmt(m.temperatura_c, 1) + " °C";
+  $("eta").textContent = info.eta_batteria_anni != null ? fmt(info.eta_batteria_anni, 1) + " anni" : "—";
+  $("eta").style.color = info.eta_batteria_anni > 4 ? css("--arancio") : "";
+  $("dataBatt").textContent = info.data_batteria ? "installata " + new Date(info.data_batteria).toLocaleDateString("it-IT") : "—";
+  $("test").textContent = info.esito_autotest ?? "—";
+  $("trasf").textContent = info.ultimo_trasferimento ?? "—";
+  $("sens").textContent = info.sensibilita ?? "—";
+  $("allarme").textContent = info.allarme_acustico ?? "—";
+
+  $("flags").innerHTML = FLAG.map(([k, t, tipo]) => `<div class="flag ${s[k] ? "on " + tipo : ""}"><i></i>${t}</div>`).join("");
+  const voci = [
+    ["Produttore", info.produttore], ["Modello", info.prodotto_completo], ["Seriale", info.seriale],
+    ["Prodotto il", info.data_produzione_ups && new Date(info.data_produzione_ups).toLocaleDateString("it-IT")],
+    ["Potenza nominale", info.potenza_nominale_w + " W"], ["Tensione nominale", info.tensione_nominale + " V"],
+    ["Passa a batteria sotto", info.soglia_bassa_v + " V"], ["Passa a batteria sopra", info.soglia_alta_v + " V"],
+    ["Avviso batteria", info.soglia_avviso_pct + " %"],
+    ["Spegnimento PC in blackout", regola ? (regola.dopo_s ? `dopo ${regola.dopo_s / 60} min` : "solo a batteria scarica") +
+      ` o autonomia < ${regola.autonomia_min_s / 60} min` : "—"],
+  ];
+  $("info").innerHTML = voci.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v ?? "—")}</dd>`).join("");
+
+  // Grezzi
+  const chiavi = Object.keys(d.grezzi);
+  $("nGrezzi").textContent = chiavi.length;
+  const f = $("filtro").value.toLowerCase();
+  $("tGrezzi").innerHTML = chiavi.filter(k => !f || k.toLowerCase().includes(f))
+    .map(k => `<tr><td><code>${esc(k)}</code></td><td class="num">${esc(d.grezzi[k])}</td></tr>`).join("");
+
+  aggiornaBanner(m);
+}
+
+let ultimeMisure = null;
+function aggiornaBanner(m = ultimeMisure) {
+  ultimeMisure = m;
+  $("banner").classList.toggle("visibile", !!inCorso);
+  if (!inCorso) return;
+  $("bannerTimer").textContent = orologio(Date.now() / 1000 - inCorso.inizio);
+  $("bannerCausa").textContent = (inCorso.causa || "") + " · iniziato alle " + new Date(inCorso.inizio * 1000).toLocaleTimeString("it-IT");
+  $("bannerCarica").textContent = fmt(m?.carica_pct) + " %";
+  $("bannerAutonomia").textContent = orologio(m?.autonomia_s);
+  const ora = Date.now() / 1000, r = regola || {};
+  if (inCorso.spegnimento_pc) {
+    $("bannerSpegniTesto").textContent = "PC in spegnimento tra";
+    $("bannerSpegni").textContent = orologio(Math.max(0, inCorso.spegnimento_pc + (r.preavviso_s || 60) - ora));
+  } else if (r.dopo_s) {
+    $("bannerSpegniTesto").textContent = "Spegnimento PC tra";
+    $("bannerSpegni").textContent = orologio(Math.max(0, inCorso.inizio + r.dopo_s - ora));
+  } else {
+    $("bannerSpegniTesto").textContent = "Spegnimento PC";
+    $("bannerSpegni").textContent = "solo a batteria scarica";
+  }
+}
+
+function disegnaEventi(ev) {
+  $("eventi").innerHTML = ev.length ? ev.map(e => `<div class="evento ${esc(e.livello)}"><i></i>
+    <span class="quando">${esc(dataOra(e.ts))}</span><span>${esc(e.testo)}</span></div>`).join("")
+    : `<div class="vuoto">Nessun evento</div>`;
+}
+
+// --- Storico e grafici ----------------------------------------------------------------
+function campiona(punti, max) {
+  if (punti.length <= max) return punti;
+  const passo = punti.length / max, out = [];
+  for (let i = 0; i < max; i++) {
+    const g = punti.slice(Math.floor(i * passo), Math.floor((i + 1) * passo));
+    if (!g.length) continue;
+    const media = k => { const v = g.map(p => p[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    out.push({t: g[g.length - 1].t, vin: media("vin"), w: Math.max(...g.map(p => p.w ?? 0)), chg: Math.min(...g.map(p => p.chg ?? 100)),
+              run: media("run"), vbat: media("vbat"), ac: g.some(p => p.ac === 0) ? 0 : 1, gap: g.some(p => p.gap)});
+  }
+  return out;
+}
+
+function disegnaGrafici() {
+  const ora = Date.now() / 1000, da = ora - finestra;
+  let p = storico.filter(x => x.t >= da);
+  // Buchi (monitor spento): spezza le linee invece di unirle
+  const soglia = Math.max(intervalloServer * 5, 15);
+  const conBuchi = [];
+  p.forEach((x, i) => { if (i && x.t - p[i - 1].t > soglia) conBuchi.push({t: p[i - 1].t + 1, gap: true}); conBuchi.push(x); });
+  p = campiona(conBuchi, 700);
+  const pt = (k, f = v => v) => p.map(x => ({x: x.t, y: x.gap || x[k] == null ? null : f(x[k])}));
+  // Fasce blackout (rete assente)
+  const bande = []; let inizio = null;
+  for (const x of p) {
+    if (x.ac === 0 && inizio == null) inizio = x.t;
+    if (x.ac !== 0 && inizio != null) { bande.push([inizio, x.t]); inizio = null; }
+  }
+  if (inizio != null) bande.push([inizio, ora]);
+  G.vin.data.datasets[0].data = p.map(x => ({x: x.t, y: x.gap ? null : x.ac === 0 ? 0 : x.vin}));
+  G.vin.data.datasets[1].data = [{x: da, y: info.soglia_bassa_v}, {x: ora, y: info.soglia_bassa_v}];
+  G.vin.data.datasets[2].data = [{x: da, y: info.soglia_alta_v}, {x: ora, y: info.soglia_alta_v}];
+  G.w.data.datasets[0].data = pt("w");
+  G.batt.data.datasets[0].data = pt("chg");
+  G.batt.data.datasets[1].data = pt("vbat");
+  G.run.data.datasets[0].data = pt("run", v => v / 60);
+  for (const g of Object.values(G)) {
+    g.$bande = bande; g.options.scales.x.min = da; g.options.scales.x.max = ora; g.update("none");
+  }
+  // Riepiloghi 24 h
+  const g24 = storico.filter(x => x.t >= ora - 86400 && x.ac !== 0 && x.vin);
+  if (g24.length) {
+    $("vinMinMax").textContent = `${fmt(Math.min(...g24.map(x => x.vin)))} / ${fmt(Math.max(...g24.map(x => x.vin)))} V`;
+    $("wattPicco").textContent = fmt(Math.max(...storico.map(x => x.w ?? 0))) + " W";
+  }
+}
+
+async function aggiornaStorico() {
+  const nuovi = await prendi("/api/storico?dal=" + ultimoTs);
+  if (nuovi.length) { storico.push(...nuovi); ultimoTs = nuovi[nuovi.length - 1].t; }
+  const limite = Date.now() / 1000 - 86400 - 60;
+  while (storico.length && storico[0].t < limite) storico.shift();
+  disegnaGrafici();
+}
+
+// --- Interruzioni --------------------------------------------------------------------
+function classeDurata(s) { return s < 10 ? "d0" : s < 120 ? "d1" : s < 900 ? "d2" : "d3"; }
+
+function disegnaInterruzioni() {
+  const ora = Date.now() / 1000;
+  const lista = interruzioni.map(i => ({...i, t0: parseData(i.inizio), t1: parseData(i.fine)}))
+    .filter(i => !periodo || i.t0 >= ora - periodo * 86400).sort((a, b) => b.t0 - a.t0);
+  const tot = lista.reduce((a, i) => a + (i.durata_s || 0), 0);
+  const piuLunga = lista.reduce((m, i) => !m || i.durata_s > m.durata_s ? i : m, null);
+  $("sNum").textContent = lista.length;
+  $("sNumS").textContent = periodo ? `negli ultimi ${periodo} giorni` : "da sempre";
+  $("sTot").textContent = durata(tot);
+  $("sMax").textContent = piuLunga ? durata(piuLunga.durata_s) : "—";
+  $("sMaxS").textContent = piuLunga ? dataOra(piuLunga.t0) : "—";
+  $("sMed").textContent = lista.length ? durata(tot / lista.length) : "—";
+  $("sUlt").textContent = lista[0] ? dataOra(lista[0].t0) : "—";
+  $("sUltS").textContent = lista[0] ? `${durata(lista[0].durata_s)} · ${durata(ora - lista[0].t1)} fa` : "nessuna registrata";
+
+  const righe = [];
+  if (inCorso) righe.push(`<tr style="background:#2a0f17"><td>${esc(dataOra(inCorso.inizio))}</td><td><b style="color:#ff8a95">in corso</b></td>
+    <td><span class="durata d3">${esc(durata(ora - inCorso.inizio))}</span></td><td>${esc(inCorso.causa ?? "")}</td>
+    <td class="num">${fmt(inCorso.carica_min_pct)} %</td><td class="num">${fmt(inCorso.carico_max_w)} W</td><td class="num">${fmt(inCorso.tensione_ingresso_prima)} V</td></tr>`);
+  for (const i of lista) righe.push(`<tr title="${esc(i.chiusura)}"><td>${esc(dataOra(i.t0))}</td><td>${esc(i.t1 ? new Date(i.t1 * 1000).toLocaleTimeString("it-IT") : "")}</td>
+    <td><span class="durata ${classeDurata(i.durata_s)}">${esc(durata(i.durata_s))}</span>${/stimata|micro/.test(i.chiusura || "") ? ' <span title="' + esc(i.chiusura) + '">*</span>' : ""}</td>
+    <td>${esc(i.causa)}</td><td class="num">${i.carica_min_pct != null ? fmt(i.carica_min_pct) + " %" : "—"}</td>
+    <td class="num">${i.carico_max_w != null ? fmt(i.carico_max_w) + " W" : "—"}</td><td class="num">${i.tensione_ingresso_prima != null ? fmt(i.tensione_ingresso_prima) + " V" : "—"}</td></tr>`);
+  $("tInterr").innerHTML = righe.length ? righe.join("") : `<tr><td colspan="7" class="vuoto">Nessuna interruzione registrata nel periodo 👍</td></tr>`;
+
+  // Barre per giorno (o per mese oltre i 60 giorni)
+  const giorni = periodo && periodo <= 60 ? periodo : 0;
+  const conteggi = new Map();
+  if (giorni) {
+    for (let k = giorni - 1; k >= 0; k--) { const d = new Date((ora - k * 86400) * 1000); conteggi.set(`${pad(d.getDate())}/${pad(d.getMonth() + 1)}`, 0); }
+    for (const i of lista) { const d = new Date(i.t0 * 1000), c = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`; if (conteggi.has(c)) conteggi.set(c, conteggi.get(c) + 1); }
+    $("titoloBarre").textContent = "Interruzioni per giorno";
+  } else {
+    for (const i of [...lista].reverse()) { const d = new Date(i.t0 * 1000), c = `${pad(d.getMonth() + 1)}/${d.getFullYear()}`; conteggi.set(c, (conteggi.get(c) || 0) + 1); }
+    $("titoloBarre").textContent = "Interruzioni per mese";
+  }
+  gGiorni.data.labels = [...conteggi.keys()]; gGiorni.data.datasets[0].data = [...conteggi.values()]; gGiorni.update("none");
+
+  const cause = new Map();
+  for (const i of lista) cause.set(i.causa || "?", (cause.get(i.causa || "?") || 0) + 1);
+  const maxC = Math.max(1, ...cause.values());
+  $("cause").innerHTML = cause.size ? [...cause].sort((a, b) => b[1] - a[1]).map(([c, n]) => `
+    <div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>${esc(c)}</span><b>${n}</b></div>
+    <div style="height:6px;border-radius:4px;background:#1a2438;margin-top:4px"><div style="height:100%;width:${n / maxC * 100}%;border-radius:4px;background:linear-gradient(90deg,#ff8a3d,#ff4d5e)"></div></div></div>`).join("")
+    : `<div class="vuoto" style="padding:14px">—</div>`;
+}
+
+async function aggiornaInterruzioni() {
+  interruzioni = await prendi("/api/interruzioni");
+  disegnaInterruzioni();
+}
+
+// --- Controlli e cicli ------------------------------------------------------------------
+$("intervallo").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  finestra = +b.dataset.s;
+  for (const x of $("intervallo").children) x.classList.toggle("attivo", x === b);
+  try { localStorage.setItem("upsFinestra", finestra); } catch {}
+  disegnaGrafici();
+});
+$("periodo").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  periodo = +b.dataset.g;
+  for (const x of $("periodo").children) x.classList.toggle("attivo", x === b);
+  disegnaInterruzioni();
+});
+$("filtro").addEventListener("input", () => ciclo());
+try {
+  const f = +localStorage.getItem("upsFinestra");
+  if (f) { finestra = f; for (const x of $("intervallo").children) x.classList.toggle("attivo", +x.dataset.s === f); }
+} catch {}
+
+let eraInCorso = false;
+async function ciclo() {
+  try {
+    const r = await prendi("/api/stato");
+    aggiornaStato(r);
+    await aggiornaStorico();
+    // A ogni cambio di stato del blackout ricarica subito il registro
+    if (!!inCorso !== eraInCorso) { eraInCorso = !!inCorso; await aggiornaInterruzioni(); }
+    else if (inCorso) disegnaInterruzioni();
+  } catch (e) {
+    $("pill").className = "pill grigio"; $("pillTesto").textContent = "Server non raggiungibile";
+  }
+}
+ciclo().then(aggiornaInterruzioni);
+setInterval(ciclo, 2000);
+setInterval(() => aggiornaInterruzioni().catch(() => {}), 30000);
+setInterval(() => inCorso && aggiornaBanner(), 1000);
+</script>
+</body>
+</html>

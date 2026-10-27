@@ -1,0 +1,5 @@
+/target
+/log
+/ups-monitor.exe
+/prototipo_python
+*.pyc
