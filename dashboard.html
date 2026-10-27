@@ -62,7 +62,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;margin-botto
 .tile h3{margin-bottom:6px;font-size:10.5px}
 .tile .v{font-size:19px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .s{font-size:11.5px;color:var(--muto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sezione{display:flex;align-items:center;gap:12px;margin:26px 2px 12px}
+.sezione{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:26px 2px 12px}
 .sezione h2{margin:0;font-size:16px;font-weight:650}
 .sezione .linea{flex:1;height:1px;background:linear-gradient(90deg,var(--bordo),transparent)}
 .bottoni{display:flex;gap:4px;background:#0b1120;border:1px solid var(--bordo);border-radius:10px;padding:3px}
@@ -86,14 +86,24 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .durata{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:600;font-size:12px}
 .d0{background:#4fa3ff1f;color:#8cc4ff}.d1{background:#ffc24b1f;color:var(--giallo)}.d2{background:#ff8a3d24;color:var(--arancio)}.d3{background:#ff4d5e24;color:#ff8a95}
 .vuoto{padding:30px;text-align:center;color:var(--debole)}
-.flags{grid-template-columns:repeat(4,1fr);gap:8px}
-.flag{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;background:#0b1120;border:1px solid #1a2438;font-size:12.5px;color:var(--muto)}
+.griglia>*{min-width:0}
+.flags{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.gruppo{margin:2px 0 8px;font-size:11px;color:var(--debole);text-transform:uppercase;letter-spacing:.7px}
+.gruppo+.flags{margin-bottom:14px}
+.flag{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;background:#0b1120;border:1px solid #1a2438;font-size:12.5px;color:var(--muto);line-height:1.25;overflow-wrap:break-word;hyphens:auto}
 .flag i{width:9px;height:9px;border-radius:50%;background:#2a3650;flex:none}
 .flag.on{color:var(--testo)}
 .flag.on.buono i{background:var(--verde);box-shadow:0 0 8px var(--verde)}
 .flag.on.cattivo{border-color:#ff4d5e55;background:#2a0f17}
 .flag.on.cattivo i{background:var(--rosso);box-shadow:0 0 8px var(--rosso)}
 .flag.on.info i{background:var(--blu);box-shadow:0 0 8px var(--blu)}
+.flag.on.avviso{border-color:#ffc24b55;background:#2a200a}
+.flag.on.avviso i{background:var(--giallo);box-shadow:0 0 8px var(--giallo)}
+.allarmi-ok{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:10px;font-weight:600;
+  color:var(--verde);background:#3ddc8412;border:1px solid #3ddc8433;margin-bottom:10px}
+.allarmi-ko{color:#ff8a95;background:#ff4d5e14;border-color:#ff4d5e44}
+.allarmi-elenco .flag:not(.on){opacity:.55}
+dd{overflow-wrap:anywhere}
 .tre{grid-template-columns:1.2fr 1fr 1fr}
 .eventi{max-height:330px;overflow:auto;display:flex;flex-direction:column;gap:6px}
 .evento{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:10px;background:#0b1120;font-size:13px}
@@ -229,7 +239,7 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px}
 
   <div class="sezione"><h2>Stato e dettagli</h2><div class="linea"></div></div>
   <div class="griglia tre">
-    <div class="card"><h3>Indicatori</h3><div class="griglia flags" id="flags"></div></div>
+    <div class="card"><h3>Indicatori</h3><div id="flags"></div></div>
     <div class="card"><h3>Eventi recenti</h3><div class="eventi" id="eventi"></div></div>
     <div class="card"><h3>UPS</h3><dl id="info"></dl></div>
   </div>
@@ -355,13 +365,17 @@ const gGiorni = new Chart($("gGiorni"), {
 // --- Stato ------------------------------------------------------------------------
 let regola = null, storico = [], ultimoTs = 0, finestra = 3600, info = {}, interruzioni = [], periodo = 30, inCorso = null, intervalloServer = 2;
 
-const FLAG = [
+// Stato: verde = normale. "In scarica" acceso = a batteria (giallo, non un guasto)
+const STATO = [
   ["rete", "Rete presente", "buono"], ["batteria_presente", "Batteria presente", "buono"],
-  ["in_carica", "In carica", "info"], ["in_scarica", "In scarica", "cattivo"],
-  ["batteria_bassa", "Batteria bassa", "cattivo"], ["autonomia_esaurita", "Autonomia esaurita", "cattivo"],
-  ["sovraccarico", "Sovraccarico", "cattivo"], ["sostituire_batteria", "Sostituire batteria", "cattivo"],
-  ["spegnimento_imminente", "Spegnimento imminente", "cattivo"], ["spegnimento_richiesto", "Spegnimento richiesto", "cattivo"],
-  ["comunicazione_persa", "Comunicazione persa", "cattivo"], ["tensione_non_regolata", "Tensione non regolata", "cattivo"],
+  ["in_carica", "In carica", "info"], ["in_scarica", "In scarica (a batteria)", "avviso"],
+];
+// Allarmi: spenti = tutto bene, accesi = problema
+const ALLARMI = [
+  ["batteria_bassa", "Batteria bassa"], ["autonomia_esaurita", "Autonomia esaurita"],
+  ["sovraccarico", "Sovraccarico"], ["sostituire_batteria", "Sostituire batteria"],
+  ["spegnimento_imminente", "Spegnimento imminente"], ["spegnimento_richiesto", "Spegnimento richiesto"],
+  ["comunicazione_persa", "Comunicazione persa"], ["tensione_non_regolata", "Tensione non regolata"],
 ];
 
 function aggiornaStato(r) {
@@ -418,7 +432,15 @@ function aggiornaStato(r) {
   $("sens").textContent = info.sensibilita ?? "—";
   $("allarme").textContent = info.allarme_acustico ?? "—";
 
-  $("flags").innerHTML = FLAG.map(([k, t, tipo]) => `<div class="flag ${s[k] ? "on " + tipo : ""}"><i></i>${t}</div>`).join("");
+  const attivi = ALLARMI.filter(([k]) => s[k]);
+  $("flags").innerHTML =
+    `<div class="gruppo">Stato</div><div class="griglia flags">` +
+    STATO.map(([k, t, tipo]) => `<div class="flag ${s[k] ? "on " + tipo : ""}"><i></i>${t}</div>`).join("") + `</div>` +
+    `<div class="gruppo">Allarmi</div>` +
+    (attivi.length ? `<div class="allarmi-ok allarmi-ko">⚠ ${attivi.length} allarme${attivi.length > 1 ? "i" : ""} attiv${attivi.length > 1 ? "i" : "o"}</div>`
+                   : `<div class="allarmi-ok">✓ Nessun allarme attivo</div>`) +
+    `<div class="griglia flags allarmi-elenco">` +
+    ALLARMI.map(([k, t]) => `<div class="flag ${s[k] ? "on cattivo" : ""}"><i></i>${t}</div>`).join("") + `</div>`;
   const voci = [
     ["Produttore", info.produttore], ["Modello", info.prodotto_completo], ["Seriale", info.seriale],
     ["Prodotto il", info.data_produzione_ups && new Date(info.data_produzione_ups).toLocaleDateString("it-IT")],
