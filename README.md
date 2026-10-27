@@ -89,6 +89,10 @@ l'UPS aggiorna il codice "causa dell'ultimo trasferimento" e il monitor se ne ac
 
 ## Note sui dati APC
 
+Il significato di **tutti i codici HID** (standard e proprietari APC `0xFF86`) è spiegato in
+[docs/CODICI_HID_APC.md](docs/CODICI_HID_APC.md), con la versione Excel filtrabile
+[docs/APC_Back-UPS_CS_codici_HID.xlsx](docs/APC_Back-UPS_CS_codici_HID.xlsx).
+
 - La **data batteria** è quella scritta nel firmware dell'UPS (03/04/2008 su questo modello):
   APC non la aggiorna da sola quando si cambia la batteria
 - La tensione di uscita (230 V) sul Back-UPS CS è il valore nominale, non una misura
