@@ -74,7 +74,7 @@ Certezza: ✅ documentato o confermato dai valori · 🟡 da NUT, coerente ma no
 | `UPS.Output.ConfigActivePower` | 400 | 400 W | Potenza massima erogabile | ✅ certo | 650 VA = 400 W reali |
 | `(calcolato)` | 168 | 168 W | Potenza assorbita stimata = carico % × 400 W | ✅ certo | Non è un codice dell'UPS: è ricavato dalle due righe sopra |
 | `UPS.Output.LowVoltageTransfer` | 180 | 180 V | Sotto questa tensione l'UPS passa a batteria | ✅ certo | Scrivibile: l'UPS accetta ogni valore intero 160–196 V (verificato scrivendo e rileggendo). Di fabbrica 196 |
-| `UPS.Output.HighVoltageTransfer` | 264 | 264 V | Sopra questa tensione l'UPS passa a batteria | ✅ certo | Scrivibile: l'UPS accetta ogni valore intero 256–278 V (verificato scrivendo e rileggendo). Di fabbrica 256 |
+| `UPS.Output.HighVoltageTransfer` | 256 | 256 V | Sopra questa tensione l'UPS passa a batteria | ✅ certo | Scrivibile: l'UPS accetta ogni valore intero 256–278 V (verificato scrivendo e rileggendo). Di fabbrica 256. Con hardware datato conviene restare a 256: a 264 V i condensatori degli alimentatori arrivano a circa 373 V di picco |
 | `UPS.Input.0xFF86:0x0061` | 1 | Media | Sensibilità ai disturbi di rete | 🟡 probabile | Range dichiarato 0–2. Alta = interviene anche per piccole distorsioni |
 | `UPS.Input.0xFF86:0x0052` | 8 | Autotest dell'UPS | Causa dell'ultimo passaggio a batteria | 🟡 probabile | Decodifica dal progetto NUT. Il monitor la usa per le micro-interruzioni |
 
