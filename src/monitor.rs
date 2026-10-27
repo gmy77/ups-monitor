@@ -320,7 +320,94 @@ fn regole_eventi(s: &Stato) -> [(bool, bool, &'static str, &'static str); 7] {
     ]
 }
 
+/// Riassunto di un intervallo di tempo per le viste lunghe (7/30 giorni).
+#[derive(Serialize, Clone, Copy)]
+pub struct Secchio {
+    t: f64,
+    vin: Option<f64>,
+    vmin: Option<f64>,
+    vmax: Option<f64>,
+    w: Option<f64>,
+    chg: Option<f64>,
+    run: Option<f64>,
+    vbat: Option<f64>,
+    ac: u8,
+    #[serde(skip)]
+    n: u32,
+}
+
+const PASSO_BASE: f64 = 300.0; // secchi da 5 minuti, uniti a 30 minuti per i 30 giorni
+
+impl Secchio {
+    /// Unisce un altro secchio: medie pesate, minimo/massimo dove servono.
+    fn unisci(&mut self, o: &Secchio) {
+        let media = |a: Option<f64>, na: u32, b: Option<f64>, nb: u32| match (a, b) {
+            (Some(x), Some(y)) => Some((x * na as f64 + y * nb as f64) / (na + nb).max(1) as f64),
+            (x, y) => x.or(y),
+        };
+        let lim = |a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64| match (a, b) {
+            (Some(x), Some(y)) => Some(f(x, y)),
+            (x, y) => x.or(y),
+        };
+        self.vin = media(self.vin, self.n, o.vin, o.n);
+        self.run = media(self.run, self.n, o.run, o.n);
+        self.vbat = media(self.vbat, self.n, o.vbat, o.n);
+        self.vmin = lim(self.vmin, o.vmin, f64::min);
+        self.vmax = lim(self.vmax, o.vmax, f64::max);
+        self.w = lim(self.w, o.w, f64::max);
+        self.chg = lim(self.chg, o.chg, f64::min);
+        self.ac = self.ac.min(o.ac);
+        self.n += o.n;
+    }
+
+    fn arrotonda(mut self) -> Secchio {
+        let r = |v: Option<f64>, k: f64| v.map(|x| (x * k).round() / k);
+        self.vin = r(self.vin, 10.0);
+        self.run = r(self.run, 1.0);
+        self.vbat = r(self.vbat, 100.0);
+        self
+    }
+}
+
+/// Legge un CSV giornaliero e lo riassume in secchi da 5 minuti.
+fn secchi_da_csv(p: &Path) -> Vec<Secchio> {
+    let mut out: Vec<Secchio> = Vec::new();
+    for r in leggi_csv(p) {
+        let g = |k: &str| r.iter().find(|(c, _)| c == k).and_then(|(_, v)| leggi_num(v));
+        let Some(t) = g("ts") else { continue };
+        let inizio = (t / PASSO_BASE).floor() * PASSO_BASE;
+        let ac = g("rete").unwrap_or(1.0) as u8;
+        // A batteria la tensione di rete letta non è significativa
+        let vin = if ac == 1 { g("tensione_ingresso") } else { None };
+        let s = Secchio { t: inizio, vin, vmin: vin, vmax: vin, w: g("carico_w"), chg: g("carica_pct"),
+                          run: g("autonomia_s"), vbat: g("tensione_batteria"), ac, n: 1 };
+        match out.last_mut() {
+            Some(u) if u.t == inizio => u.unisci(&s),
+            _ => out.push(s),
+        }
+    }
+    out
+}
+
+/// Ultimo stato noto, salvato a ogni lettura: alla riapertura dice com'era tutto alla chiusura.
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct Istantanea {
+    ts: f64,
+    #[serde(default)]
+    avvio: f64,
+    carica: Option<f64>,
+    causa: Option<String>,
+    rete: bool,
+    vin: Option<f64>,
+}
+
+const MAX_AVVII: usize = 30;
+
 struct Interno {
+    /// Stato alla chiusura precedente (consumato alla prima lettura dopo l'avvio)
+    precedente: Option<Istantanea>,
+    /// Resoconti "dall'ultima chiusura", il più recente in fondo
+    avvii: VecDeque<Value>,
     ultimo: Option<Lettura>,
     errore: Option<String>,
     storico: VecDeque<Punto>,
@@ -336,6 +423,8 @@ pub struct Monitor {
     pub intervallo: f64,
     avvio: f64,
     spegnimento: RegolaSpegnimento,
+    /// Secchi già calcolati per ogni CSV giornaliero (chiave: file, dimensione)
+    cache_lunga: Arc<Mutex<std::collections::HashMap<PathBuf, (u64, Vec<Secchio>)>>>,
 }
 
 impl Monitor {
@@ -343,6 +432,7 @@ impl Monitor {
         fs::create_dir_all(&cartella).ok();
         let m = Monitor {
             dentro: Arc::new(Mutex::new(Interno {
+                precedente: None, avvii: VecDeque::new(),
                 ultimo: None, errore: None, storico: VecDeque::new(), eventi: VecDeque::new(),
                 interruzione: None, campioni: 0,
             })),
@@ -350,6 +440,7 @@ impl Monitor {
             intervallo,
             avvio: adesso(),
             spegnimento,
+            cache_lunga: Arc::new(Mutex::new(std::collections::HashMap::new())),
         };
         m.carica_da_disco();
         m
@@ -392,6 +483,27 @@ impl Monitor {
                     chg: g("carica_pct"), run: g("autonomia_s"), vbat: g("tensione_batteria"),
                     temp: g("temperatura_c"), ac: g("rete").unwrap_or(1.0) as u8,
                 });
+            }
+        }
+        // Stato alla chiusura e resoconti delle aperture precedenti
+        d.precedente = fs::read_to_string(self.file("stato_chiusura.json")).ok()
+            .and_then(|s| serde_json::from_str(&s).ok());
+        if d.precedente.is_none() {
+            // Prima volta con questa versione: lo stato di chiusura si ricava dall'ultimo campione
+            d.precedente = csv.iter().rev().find_map(|p| leggi_csv(p).pop()).and_then(|r| {
+                let g = |k: &str| r.iter().find(|(c, _)| c == k).and_then(|(_, v)| leggi_num(v));
+                Some(Istantanea { ts: g("ts")?, avvio: 0.0, carica: g("carica_pct"), causa: None,
+                                  rete: g("rete").unwrap_or(1.0) == 1.0, vin: g("tensione_ingresso") })
+            });
+        }
+        if let Ok(f) = File::open(self.file("riepiloghi_avvio.jsonl")) {
+            for r in BufReader::new(f).lines().map_while(Result::ok) {
+                if let Ok(v) = serde_json::from_str(&r) {
+                    d.avvii.push_back(v);
+                }
+            }
+            while d.avvii.len() > MAX_AVVII {
+                d.avvii.pop_front();
             }
         }
         // Blackout rimasto aperto: il monitor si è fermato durante l'interruzione
@@ -552,6 +664,110 @@ impl Monitor {
         self.evento(d, "critico", format!("Spegnimento del PC avviato ({motivo}), preavviso {} s", r.preavviso_s));
     }
 
+    /// Resoconto "dall'ultima chiusura": confronta lo stato salvato alla chiusura con la
+    /// prima lettura dopo la riapertura e riassume la sessione precedente.
+    fn crea_riepilogo(&self, d: &mut Interno, prev: Istantanea, l: &Lettura) {
+        let ora = l.ts;
+        let pausa = ora - prev.ts;
+        let carica = l.misure.carica_pct;
+
+        // Indizi di interventi dell'UPS mentre nessuno guardava
+        let mut a_monitor_spento: Vec<String> = Vec::new();
+        if !prev.rete {
+            a_monitor_spento.push("Alla chiusura l'UPS era a batteria: il monitor si è fermato durante un blackout".into());
+        }
+        if l.causa.is_some() && prev.causa.is_some() && l.causa != prev.causa {
+            a_monitor_spento.push(format!(
+                "L'UPS è passato a batteria almeno una volta (causa registrata dall'UPS: {})",
+                l.causa.clone().unwrap_or_default()));
+        }
+        if let (Some(prima), Some(adesso_c)) = (prev.carica, carica) {
+            if adesso_c + 2.0 < prima {
+                a_monitor_spento.push(format!(
+                    "La batteria è scesa dal {prima:.0}% al {adesso_c:.0}%: è stata usata durante la pausa"));
+            }
+        }
+        if l.stato.in_carica && prev.carica.is_some_and(|c| c >= 99.0) {
+            a_monitor_spento.push("La batteria si sta ricaricando: probabile intervento recente dell'UPS".into());
+        }
+        if !l.stato.rete {
+            a_monitor_spento.push("Alla riapertura l'UPS è a batteria: blackout in corso".into());
+        }
+        let esito = if a_monitor_spento.is_empty() { "tranquillo" } else { "interventi" };
+
+        // Sessione precedente: dal suo avvio alla chiusura
+        // Inizio sessione: salvato nell'istantanea, oppure (stato ricostruito dal CSV)
+        // l'ultimo avvio registrato tra gli eventi
+        let inizio_sess = if prev.avvio > 0.0 { prev.avvio } else {
+            d.eventi.iter().rev()
+                .find(|e| e.ts <= prev.ts && (e.testo.starts_with("Monitoraggio avviato") || e.testo.starts_with("Riaperto")))
+                .map(|e| e.ts).unwrap_or(prev.ts)
+        };
+        let punti: Vec<&Punto> = d.storico.iter().filter(|p| p.t >= inizio_sess && p.t <= prev.ts).collect();
+        let estremo = |f: fn(&Punto) -> Option<f64>, max: bool| {
+            let mut v = punti.iter().filter(|p| p.ac == 1).filter_map(|p| f(p));
+            let primo = v.next()?;
+            Some(v.fold(primo, |a, b| if max { a.max(b) } else { a.min(b) }))
+        };
+        let (da, a) = (data_ora(inizio_sess), data_ora(prev.ts));
+        let interr: Vec<_> = leggi_csv(&self.file("interruzioni.csv")).into_iter()
+            .filter(|r| r.iter().find(|(k, _)| k == "inizio")
+                .is_some_and(|(_, v)| v.as_str() >= da.as_str() && v.as_str() <= a.as_str()))
+            .collect();
+        let tempo_batteria: f64 = interr.iter()
+            .filter_map(|r| r.iter().find(|(k, _)| k == "durata_s").and_then(|(_, v)| leggi_num(v)))
+            .sum::<f64>() + 0.0; // + 0.0: la somma vuota di f64 vale -0.0
+
+        let riepilogo = json!({
+            "aperto": ora,
+            "chiuso": prev.ts,
+            "pausa_s": pausa,
+            "esito": esito,
+            "a_monitor_spento": a_monitor_spento,
+            "sessione_precedente": {
+                "inizio": inizio_sess,
+                "fine": prev.ts,
+                "durata_s": prev.ts - inizio_sess,
+                "interruzioni": interr.len(),
+                "tempo_a_batteria_s": tempo_batteria,
+                "tensione_min": estremo(|p| p.vin, false),
+                "tensione_max": estremo(|p| p.vin, true),
+                "potenza_max_w": estremo(|p| p.w, true),
+                "dati_parziali": punti.first().is_some_and(|p| p.t > inizio_sess + 600.0),
+            },
+            "alla_chiusura": {"carica": prev.carica, "rete": prev.rete, "tensione": prev.vin, "causa": prev.causa},
+            "alla_riapertura": {"carica": carica, "rete": l.stato.rete, "tensione": l.misure.tensione_ingresso,
+                                "causa": l.causa},
+        });
+        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(self.file("riepiloghi_avvio.jsonl")) {
+            let _ = writeln!(f, "{riepilogo}");
+        }
+        let testo = if esito == "tranquillo" {
+            format!("Riaperto dopo {} di pausa: nessun segno di interventi dell'UPS", durata_testo(pausa))
+        } else {
+            format!("Riaperto dopo {} di pausa: l'UPS è intervenuto mentre il monitor era spento", durata_testo(pausa))
+        };
+        self.evento(d, if esito == "tranquillo" { "info" } else { "avviso" }, testo);
+        d.avvii.push_back(riepilogo);
+        while d.avvii.len() > MAX_AVVII {
+            d.avvii.pop_front();
+        }
+    }
+
+    fn salva_istantanea(&self, l: &Lettura) {
+        let ist = Istantanea {
+            ts: l.ts, avvio: self.avvio, carica: l.misure.carica_pct, causa: l.causa.clone(),
+            rete: l.stato.rete, vin: l.misure.tensione_ingresso,
+        };
+        if let Ok(s) = serde_json::to_string(&ist) {
+            // Scrittura atomica: un crash a metà non lascia un file rotto
+            let tmp = self.file("stato_chiusura.json.tmp");
+            if fs::write(&tmp, s).is_ok() {
+                let _ = fs::rename(&tmp, self.file("stato_chiusura.json"));
+            }
+        }
+    }
+
     fn registra_csv(&self, l: &Lettura) {
         let oggi = Local::now();
         let nome = format!("ups_{:04}-{:02}-{:02}.csv", oggi.year(), oggi.month(), oggi.day());
@@ -589,6 +805,9 @@ impl Monitor {
             self.evento(&mut d, "ok", "Comunicazione con l'UPS ristabilita".into());
         }
         self.gestisci_interruzioni(&mut d, &l, prec.as_ref());
+        if let Some(stato_chiusura) = d.precedente.take() {
+            self.crea_riepilogo(&mut d, stato_chiusura, &l);
+        }
 
         let m = &l.misure;
         d.storico.push_back(Punto {
@@ -603,6 +822,7 @@ impl Monitor {
         d.campioni += 1;
         drop(d);
         self.registra_csv(&l);
+        self.salva_istantanea(&l);
         self.dentro.lock().unwrap().ultimo = Some(l);
     }
 
@@ -647,6 +867,7 @@ impl Monitor {
             "errore": d.errore,
             "eventi": d.eventi.iter().rev().take(50).collect::<Vec<_>>(),
             "interruzione_in_corso": in_corso,
+            "avvii": d.avvii.iter().rev().take(MAX_AVVII).collect::<Vec<_>>(),
             "server": {"avvio": self.avvio, "campioni": d.campioni, "intervallo": self.intervallo},
             "spegnimento": self.spegnimento,
         })
@@ -655,6 +876,48 @@ impl Monitor {
     pub fn storico_json(&self, dal: f64) -> Value {
         let d = self.dentro.lock().unwrap();
         json!(d.storico.iter().filter(|p| p.t > dal).collect::<Vec<_>>())
+    }
+
+    /// Storico riassunto degli ultimi `giorni` dai CSV giornalieri: secchi da 5 minuti
+    /// fino a 7 giorni, da 30 minuti oltre. I giorni già chiusi restano in cache.
+    pub fn storico_lungo_json(&self, giorni: u32) -> Value {
+        let giorni = giorni.clamp(1, 366);
+        let dal = adesso() - giorni as f64 * 86400.0;
+        let passo = if giorni <= 7 { PASSO_BASE } else { 1800.0 };
+        let primo_giorno = (Local::now().date_naive() - chrono::Duration::days(giorni as i64 + 1))
+            .format("ups_%Y-%m-%d.csv").to_string();
+        let mut file: Vec<PathBuf> = fs::read_dir(&self.cartella).into_iter().flatten().flatten()
+            .map(|e| e.path())
+            .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                n.starts_with("ups_") && n.ends_with(".csv") && n >= primo_giorno.as_str()
+            }))
+            .collect();
+        file.sort();
+
+        let mut secchi: Vec<Secchio> = Vec::new();
+        {
+            let mut cache = self.cache_lunga.lock().unwrap();
+            for p in &file {
+                let dim = fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+                let voce = cache.entry(p.clone()).or_insert((u64::MAX, Vec::new()));
+                if voce.0 != dim {
+                    *voce = (dim, secchi_da_csv(p));
+                }
+                secchi.extend(voce.1.iter().filter(|s| s.t >= dal).copied());
+            }
+        }
+        let mut out: Vec<Secchio> = Vec::new();
+        for s in secchi {
+            let inizio = (s.t / passo).floor() * passo;
+            match out.last_mut() {
+                Some(u) if u.t == inizio => u.unisci(&s),
+                _ => out.push(Secchio { t: inizio, ..s }),
+            }
+        }
+        json!({
+            "passo": passo,
+            "punti": out.into_iter().map(Secchio::arrotonda).collect::<Vec<_>>(),
+        })
     }
 
     pub fn interruzioni_json(&self) -> Value {

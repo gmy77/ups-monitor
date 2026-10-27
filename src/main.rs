@@ -206,6 +206,12 @@ fn gestisci(mut req: Request, monitor: &Monitor, auth: &Auth) {
                 .and_then(|v| v.parse().ok()).unwrap_or(0.0);
             Response::from_string(monitor.storico_json(dal).to_string()).with_header(json()).with_header(no_cache())
         }
+        (Method::Get, "/api/storico_lungo") => {
+            let giorni = query.split('&').find_map(|p| p.strip_prefix("giorni="))
+                .and_then(|v| v.parse().ok()).unwrap_or(7);
+            Response::from_string(monitor.storico_lungo_json(giorni).to_string())
+                .with_header(json()).with_header(no_cache())
+        }
         (Method::Get, "/api/interruzioni") => Response::from_string(monitor.interruzioni_json().to_string())
             .with_header(json()).with_header(no_cache()),
         (Method::Get, "/interruzioni.csv") => Response::from_data(monitor.interruzioni_csv())

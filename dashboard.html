@@ -116,6 +116,23 @@ details{margin-top:14px}
 summary{cursor:pointer;color:var(--muto);padding:6px 2px}
 #filtro{width:100%;margin:8px 0;padding:9px 12px;border-radius:9px;border:1px solid var(--bordo);background:#0b1120;color:var(--testo);font:inherit}
 code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px}
+.riapertura{display:none;margin-bottom:16px;border-color:#2b4a7a;background:linear-gradient(120deg,#122544,#101a2e 55%,#171433)}
+.riapertura.visibile{display:block}
+.riapertura.allerta{border-color:#ffc24b66;background:linear-gradient(120deg,#2a2210,#141a2a 55%,#1a1424)}
+.ria-testa{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+.ria-testa h3{margin:0}
+.ria-esito{padding:3px 11px;border-radius:999px;font-size:12px;font-weight:600}
+.ria-esito.ok{color:var(--verde);background:#3ddc8418;border:1px solid #3ddc8440}
+.ria-esito.ko{color:var(--giallo);background:#ffc24b18;border:1px solid #ffc24b55}
+.ria-griglia{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.ria-griglia div{padding:10px 12px;border-radius:10px;background:#0b112099}
+.ria-griglia span{display:block;color:var(--muto);font-size:11.5px;margin-bottom:2px}
+.ria-griglia b{font-size:16px}
+.ria-blocchi{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ria-blocchi h4{margin:0 0 6px;font-size:12px;color:var(--muto);text-transform:uppercase;letter-spacing:.6px}
+.ria-blocchi ul{margin:0;padding-left:18px;font-size:13px}
+.ria-blocchi li{margin:3px 0}
+@media (max-width:820px){.ria-blocchi{grid-template-columns:1fr}}
 .errore{display:none;margin-bottom:16px;padding:12px 16px;border-radius:12px;background:#2a1a0a;border:1px solid #ffc24b55;color:var(--giallo)}
 .errore.visibile{display:block}
 @media (max-width:1200px){.kpi{grid-template-columns:repeat(2,1fr)}.piccoli{grid-template-columns:repeat(4,1fr)}.stat{grid-template-columns:repeat(3,1fr)}.tre{grid-template-columns:1fr 1fr}.flags{grid-template-columns:repeat(3,1fr)}}
@@ -137,6 +154,30 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px}
   </header>
 
   <div class="errore" id="errore"></div>
+
+  <div class="card riapertura" id="riapertura">
+    <div class="ria-testa">
+      <h3>Dall'ultima chiusura</h3>
+      <span class="ria-esito" id="riaEsito"></span>
+      <div class="spazio"></div>
+      <button class="btn" id="riaChiudi">Nascondi</button>
+    </div>
+    <div class="ria-griglia">
+      <div><span>Chiuso</span><b id="riaChiuso">—</b></div>
+      <div><span>Riaperto</span><b id="riaAperto">—</b></div>
+      <div><span>Spento per</span><b id="riaPausa">—</b></div>
+      <div><span>Carica alla chiusura → ora</span><b id="riaCarica">—</b></div>
+    </div>
+    <div class="ria-blocchi">
+      <div><h4>A monitor spento</h4><ul id="riaSpento"></ul></div>
+      <div><h4>Sessione precedente</h4><dl id="riaSessione"></dl></div>
+    </div>
+    <details><summary>Registro delle aperture (<span id="riaN">0</span>)</summary>
+      <div class="tabella" style="max-height:300px"><table>
+        <thead><tr><th>Chiuso</th><th>Riaperto</th><th>Pausa</th><th>Esito</th><th>Sessione prima</th><th class="num">Interruzioni</th><th class="num">Rete min/max</th></tr></thead>
+        <tbody id="riaRegistro"></tbody></table></div>
+    </details>
+  </div>
 
   <div class="banner" id="banner">
     <div><b>⚠ BLACKOUT IN CORSO</b><br><span id="bannerCausa"></span></div>
@@ -198,6 +239,7 @@ code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12px}
     <div class="bottoni" id="intervallo">
       <button data-s="900">15 min</button><button data-s="3600" class="attivo">1 h</button>
       <button data-s="21600">6 h</button><button data-s="86400">24 h</button>
+      <button data-s="604800">7 gg</button><button data-s="2592000">30 gg</button>
     </div>
   </div>
   <div class="griglia grafici">
@@ -304,6 +346,17 @@ const pluginBande = {
   beforeDatasetsDraw(c) {
     const b = c.$bande || [], {ctx, chartArea: a, scales: {x}} = c;
     ctx.save();
+    // Pause del monitor (programma chiuso o PC spento): fasce grigie tratteggiate
+    for (const [t0, t1] of c.$pause || []) {
+      const x0 = Math.max(a.left, x.getPixelForValue(t0)), x1 = Math.min(a.right, x.getPixelForValue(t1));
+      if (x1 <= x0) continue;
+      ctx.fillStyle = "rgba(129,147,178,.10)";
+      ctx.fillRect(x0, a.top, x1 - x0, a.bottom - a.top);
+      ctx.strokeStyle = "rgba(129,147,178,.35)"; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(x0, a.top); ctx.lineTo(x0, a.bottom); ctx.moveTo(x1, a.top); ctx.lineTo(x1, a.bottom); ctx.stroke();
+      ctx.setLineDash([]);
+      if (x1 - x0 > 46) { ctx.fillStyle = "rgba(129,147,178,.7)"; ctx.font = "11px Segoe UI"; ctx.textAlign = "center"; ctx.fillText("monitor spento", (x0 + x1) / 2, a.top + 14); }
+    }
     for (const [t0, t1] of b) {
       const x0 = Math.max(a.left, x.getPixelForValue(t0)), x1 = Math.min(a.right, x.getPixelForValue(t1));
       if (x1 <= x0) continue;
@@ -348,7 +401,9 @@ function grafico(id, datasets, scale = {}) {
 const G = {
   vin: grafico("gVin", [serie("Rete", css("--blu")),
     {label: "Soglia bassa", data: [], borderColor: "#ff4d5e88", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, soglia: true},
-    {label: "Soglia alta", data: [], borderColor: "#ff4d5e88", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, soglia: true}]),
+    {label: "Soglia alta", data: [], borderColor: "#ff4d5e88", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, soglia: true},
+    {label: "Minima", data: [], borderColor: "#4fa3ff66", borderWidth: 1, pointRadius: 0, fill: false, tension: .3, spanGaps: false},
+    {label: "Massima", data: [], borderColor: "#9b7bff88", borderWidth: 1, pointRadius: 0, fill: false, tension: .3, spanGaps: false}]),
   w: grafico("gW", [serie("Watt", css("--viola"))], {y: {beginAtZero: true}}),
   batt: grafico("gBatt", [serie("Carica %", css("--verde")), serie("Tensione V", css("--giallo"), {fill: false, yAxisID: "y1", borderWidth: 1.5})],
                 {y: {min: 0, max: 100}, y1: {}}),
@@ -387,6 +442,8 @@ function aggiornaStato(r) {
   inCorso = r.interruzione_in_corso;
   regola = r.spegnimento;
   disegnaEventi(r.eventi || []);
+  ultimoAvvio = (r.avvii || [])[0] || null;
+  disegnaAvvii(r.avvii || []);
   const d = r.dati;
   if (!d) { $("pill").className = "pill grigio"; $("pillTesto").textContent = "UPS non raggiungibile"; return; }
   const m = d.misure, s = d.stato; info = d.info;
@@ -484,6 +541,48 @@ function aggiornaBanner(m = ultimeMisure) {
   }
 }
 
+// --- Resoconto "dall'ultima chiusura" (calcolato e salvato dal server a ogni riavvio) --
+let nascosto = null;
+try { nascosto = +localStorage.getItem("upsRiaperturaNascosta") || null; } catch {}
+function disegnaAvvii(avvii) {
+  const box = $("riapertura"), r = avvii && avvii[0];
+  if (!r) { box.classList.remove("visibile"); return; }
+  const s = r.sessione_precedente || {}, ok = r.esito === "tranquillo";
+  box.classList.toggle("visibile", nascosto !== r.aperto);
+  box.classList.toggle("allerta", !ok);
+  $("riaEsito").className = "ria-esito " + (ok ? "ok" : "ko");
+  $("riaEsito").textContent = ok ? "✓ Nessun intervento dell'UPS rilevato" : "⚠ L'UPS è intervenuto a monitor spento";
+  $("riaChiuso").textContent = dataOra(r.chiuso);
+  $("riaAperto").textContent = dataOra(r.aperto);
+  $("riaPausa").textContent = durata(r.pausa_s);
+  $("riaCarica").textContent = `${fmt(r.alla_chiusura?.carica)} % → ${fmt(r.alla_riapertura?.carica)} %`;
+  $("riaSpento").innerHTML = (r.a_monitor_spento?.length ? r.a_monitor_spento : ["Nessun segno di blackout: causa dell'ultimo intervento e carica della batteria sono rimaste uguali"])
+    .map(t => `<li>${esc(t)}</li>`).join("");
+  const voci = [
+    ["Dalle", dataOra(s.inizio)], ["Alle", dataOra(s.fine)], ["Durata", durata(s.durata_s)],
+    ["Interruzioni", s.interruzioni ? `${s.interruzioni} (${durata(s.tempo_a_batteria_s)} a batteria)` : "nessuna"],
+    ["Tensione di rete", s.tensione_min != null ? `${fmt(s.tensione_min)} – ${fmt(s.tensione_max)} V` : "—"],
+    ["Potenza massima", s.potenza_max_w != null ? fmt(s.potenza_max_w) + " W" : "—"],
+  ];
+  $("riaSessione").innerHTML = voci.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") +
+    (s.dati_parziali ? `<dt></dt><dd style="color:var(--debole);font-weight:400">tensione e potenza: solo ultime 24 h</dd>` : "");
+  $("riaN").textContent = avvii.length;
+  $("riaRegistro").innerHTML = avvii.map(a => {
+    const p = a.sessione_precedente || {};
+    return `<tr><td>${esc(dataOra(a.chiuso))}</td><td>${esc(dataOra(a.aperto))}</td><td>${esc(durata(a.pausa_s))}</td>
+      <td>${a.esito === "tranquillo" ? "✓ tranquillo" : '<b style="color:var(--giallo)">⚠ interventi</b>'}</td>
+      <td>${esc(durata(p.durata_s))}</td><td class="num">${p.interruzioni ?? 0}</td>
+      <td class="num">${p.tensione_min != null ? fmt(p.tensione_min) + " / " + fmt(p.tensione_max) + " V" : "—"}</td></tr>`;
+  }).join("");
+}
+$("riaChiudi").addEventListener("click", () => {
+  const r = ultimoAvvio; if (!r) return;
+  nascosto = r.aperto;
+  try { localStorage.setItem("upsRiaperturaNascosta", r.aperto); } catch {}
+  $("riapertura").classList.remove("visibile");
+});
+let ultimoAvvio = null;
+
 function disegnaEventi(ev) {
   $("eventi").innerHTML = ev.length ? ev.map(e => `<div class="evento ${esc(e.livello)}"><i></i>
     <span class="quando">${esc(dataOra(e.ts))}</span><span>${esc(e.testo)}</span></div>`).join("")
@@ -504,14 +603,31 @@ function campiona(punti, max) {
   return out;
 }
 
+// Viste lunghe (7/30 giorni): dati riassunti dal server a partire dai CSV salvati
+let lungo = {giorni: 0, passo: 300, punti: [], caricato: 0};
+async function aggiornaLungo(forza) {
+  const giorni = Math.round(finestra / 86400);
+  if (!forza && lungo.giorni === giorni && Date.now() - lungo.caricato < 300000) return;
+  const r = await prendi("/api/storico_lungo?giorni=" + giorni);
+  lungo = {giorni, passo: r.passo, punti: r.punti, caricato: Date.now()};
+}
+
 function disegnaGrafici() {
-  const ora = Date.now() / 1000, da = ora - finestra;
-  let p = storico.filter(x => x.t >= da);
-  // Buchi (monitor spento): spezza le linee invece di unirle
-  const soglia = Math.max(intervalloServer * 5, 15);
-  const conBuchi = [];
-  p.forEach((x, i) => { if (i && x.t - p[i - 1].t > soglia) conBuchi.push({t: p[i - 1].t + 1, gap: true}); conBuchi.push(x); });
-  p = campiona(conBuchi, 700);
+  const ora = Date.now() / 1000, da = ora - finestra, viaLunga = finestra > 86400;
+  let p = viaLunga ? lungo.punti.filter(x => x.t >= da) : storico.filter(x => x.t >= da);
+  // Buchi (monitor spento): spezza le linee e li segna come fasce grigie
+  const soglia = viaLunga ? lungo.passo * 2.5 : Math.max(intervalloServer * 5, 15);
+  const conBuchi = [], pause = [];
+  p.forEach((x, i) => {
+    if (i && x.t - p[i - 1].t > soglia) {
+      pause.push([p[i - 1].t + (viaLunga ? lungo.passo : 0), x.t]);
+      conBuchi.push({t: p[i - 1].t + 1, gap: true});
+    }
+    conBuchi.push(x);
+  });
+  // Monitor spento anche tra l'ultimo dato e adesso (es. pagina rimasta aperta)
+  if (p.length && ora - p[p.length - 1].t > soglia * 2) pause.push([p[p.length - 1].t, ora]);
+  if (!viaLunga) p = campiona(conBuchi, 700); else p = conBuchi;
   const pt = (k, f = v => v) => p.map(x => ({x: x.t, y: x.gap || x[k] == null ? null : f(x[k])}));
   // Fasce blackout (rete assente)
   const bande = []; let inizio = null;
@@ -523,12 +639,19 @@ function disegnaGrafici() {
   G.vin.data.datasets[0].data = p.map(x => ({x: x.t, y: x.gap ? null : x.ac === 0 ? 0 : x.vin}));
   G.vin.data.datasets[1].data = [{x: da, y: info.soglia_bassa_v}, {x: ora, y: info.soglia_bassa_v}];
   G.vin.data.datasets[2].data = [{x: da, y: info.soglia_alta_v}, {x: ora, y: info.soglia_alta_v}];
+  G.vin.data.datasets[3].data = viaLunga ? pt("vmin") : [];
+  G.vin.data.datasets[4].data = viaLunga ? pt("vmax") : [];
+  if (viaLunga) G.vin.data.datasets[0].data = pt("vin");
+  G.vin.options.plugins.legend.display = viaLunga;
+  const tick = viaLunga ? (v => { const d = new Date(v * 1000); return pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + (finestra <= 7 * 86400 ? " " + pad(d.getHours()) + ":00" : ""); }) : (v => oraBreve(v));
   G.w.data.datasets[0].data = pt("w");
   G.batt.data.datasets[0].data = pt("chg");
   G.batt.data.datasets[1].data = pt("vbat");
   G.run.data.datasets[0].data = pt("run", v => v / 60);
   for (const g of Object.values(G)) {
-    g.$bande = bande; g.options.scales.x.min = da; g.options.scales.x.max = ora; g.update("none");
+    g.$bande = bande; g.$pause = pause;
+    g.options.scales.x.min = da; g.options.scales.x.max = ora; g.options.scales.x.ticks.callback = tick;
+    g.update("none");
   }
   // Riepiloghi 24 h
   const g24 = storico.filter(x => x.t >= ora - 86400 && x.ac !== 0 && x.vin);
@@ -543,6 +666,7 @@ async function aggiornaStorico() {
   if (nuovi.length) { storico.push(...nuovi); ultimoTs = nuovi[nuovi.length - 1].t; }
   const limite = Date.now() / 1000 - 86400 - 60;
   while (storico.length && storico[0].t < limite) storico.shift();
+  if (finestra > 86400) await aggiornaLungo();
   disegnaGrafici();
 }
 
@@ -607,7 +731,7 @@ $("intervallo").addEventListener("click", e => {
   finestra = +b.dataset.s;
   for (const x of $("intervallo").children) x.classList.toggle("attivo", x === b);
   try { localStorage.setItem("upsFinestra", finestra); } catch {}
-  disegnaGrafici();
+  (finestra > 86400 ? aggiornaLungo(true) : Promise.resolve()).then(disegnaGrafici).catch(() => {});
 });
 $("periodo").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;

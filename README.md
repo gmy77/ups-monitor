@@ -62,11 +62,25 @@ Avvio automatico: collegamento `UPS Monitor.lnk` nella cartella Esecuzione autom
 | `interruzioni.csv` | **una riga per blackout**, mai cancellato. Si apre con Excel (`;`, virgola decimale) |
 | `ups_AAAA-MM-GG.csv` | un campione ogni 2 s: tensioni, carico, carica, autonomia, temperatura |
 | `eventi.jsonl` | eventi: rete persa e tornata, batteria bassa, sovraccarico, ... |
+| `stato_chiusura.json` | ultimo stato noto (ora, carica, causa ultimo intervento, rete), aggiornato a ogni lettura |
+| `riepiloghi_avvio.jsonl` | **un resoconto per ogni riapertura**: quando si era chiuso, quanto è rimasto spento, com'è andata la sessione precedente e se l'UPS è intervenuto a monitor spento |
 | `interruzione_in_corso.json` | blackout aperto; se il PC si spegne durante il blackout, al riavvio viene chiuso e segnato come "fine stimata" |
 | `config.json` | hash PBKDF2-SHA256 della password (mai in chiaro) |
 | `sessioni.json` | hash dei token di sessione attivi |
 
 Dalla dashboard: **Esporta CSV** scarica `interruzioni.csv`.
+
+### Continuità tra una chiusura e l'altra
+
+Nulla si perde chiudendo il programma o spegnendo il PC: tutto è su disco e viene ricaricato.
+
+- **Dall'ultima chiusura**: a ogni riavvio la dashboard mostra in alto il resoconto della pausa.
+  Mentre il monitor è spento nessuno legge l'UPS, ma alla riapertura il confronto con lo stato
+  salvato rivela se l'UPS è intervenuto (cambio della causa dell'ultimo trasferimento, carica
+  scesa, batteria in ricarica, blackout in corso alla chiusura). Lo storico delle aperture resta
+  consultabile sotto il riquadro
+- **Grafici fino a 30 giorni**: le viste 7 e 30 giorni riassumono i CSV giornalieri (secchi da
+  5 e 30 minuti, con tensione minima e massima). Le pause del monitor sono fasce grigie
 
 ### Colonne di `interruzioni.csv`
 
