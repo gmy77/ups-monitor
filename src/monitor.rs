@@ -11,7 +11,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use serde::{Deserialize, Serialize};
@@ -846,12 +846,24 @@ impl Monitor {
                 }
             }
             if let Some(u) = &ups {
+                let inizio = Instant::now();
                 let grezzi = u.leggi_tutto();
+                let lettura = inizio.elapsed().as_secs_f64();
                 if grezzi.is_empty() {
                     self.errore("L'UPS non risponde".into());
                     ups = None;
                 } else {
                     self.elabora(normalizza(grezzi));
+                }
+                // Un ciclo troppo lungo lascia un buco nei grafici: annota se è colpa dell'UPS
+                // (lettura HID lenta) o del PC (elaborazione e scrittura dei file)
+                let resto = inizio.elapsed().as_secs_f64() - lettura;
+                if lettura + resto > (self.intervallo * 3.0).max(8.0) {
+                    let s = |x: f64| format!("{x:.1}").replace('.', ",");
+                    let causa = if lettura >= resto { "l'UPS ha risposto lentamente" } else { "PC lento a elaborare e salvare" };
+                    let mut d = self.dentro.lock().unwrap();
+                    self.evento(&mut d, "info", format!(
+                        "Ciclo lento: {} s ({causa}; lettura {} s, elaborazione {} s)", s(lettura + resto), s(lettura), s(resto)));
                 }
             }
             std::thread::sleep(Duration::from_secs_f64(self.intervallo));
