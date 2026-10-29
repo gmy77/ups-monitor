@@ -2,4 +2,6 @@
 /log
 /ups-monitor.exe
 /prototipo_python
+*.zip
+*.old
 *.pyc

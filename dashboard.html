@@ -663,7 +663,9 @@ function disegnaGrafici() {
 
 async function aggiornaStorico() {
   const nuovi = await prendi("/api/storico?dal=" + ultimoTs);
-  if (nuovi.length) { storico.push(...nuovi); ultimoTs = nuovi[nuovi.length - 1].t; }
+  // Solo punti davvero nuovi e in ordine: una risposta arrivata in ritardo non deve
+  // riaggiungere punti già presenti (creerebbe linee che tornano indietro nel tempo)
+  for (const p of nuovi) if (p.t > ultimoTs) { storico.push(p); ultimoTs = p.t; }
   const limite = Date.now() / 1000 - 86400 - 60;
   while (storico.length && storico[0].t < limite) storico.shift();
   if (finestra > 86400) await aggiornaLungo();
@@ -745,17 +747,29 @@ try {
   if (f) { finestra = f; for (const x of $("intervallo").children) x.classList.toggle("attivo", +x.dataset.s === f); }
 } catch {}
 
-let eraInCorso = false;
+let eraInCorso = false, cicloAttivo = false, avvioServer = null;
 async function ciclo() {
+  // Un aggiornamento alla volta: se l'UPS risponde lento non si accavallano
+  if (cicloAttivo) return;
+  cicloAttivo = true;
   try {
     const r = await prendi("/api/stato");
+    // Monitor riavviato: lo storico della pagina si ricarica da zero
+    if (avvioServer !== null && r.server?.avvio !== avvioServer) { storico = []; ultimoTs = 0; }
+    avvioServer = r.server?.avvio ?? null;
     aggiornaStato(r);
     await aggiornaStorico();
     // A ogni cambio di stato del blackout ricarica subito il registro
     if (!!inCorso !== eraInCorso) { eraInCorso = !!inCorso; await aggiornaInterruzioni(); }
     else if (inCorso) disegnaInterruzioni();
   } catch (e) {
-    $("pill").className = "pill grigio"; $("pillTesto").textContent = "Server non raggiungibile";
+    // fetch fallisce con TypeError solo se il server non risponde; il resto è un errore della pagina
+    const rete = e instanceof TypeError && /fetch|network|Failed/i.test(e.message) || /^HTTP 5/.test(e.message);
+    if (!rete) console.error(e);
+    $("pill").className = "pill grigio";
+    $("pillTesto").textContent = rete ? "Server non raggiungibile" : "Errore nella pagina (ricarica con F5)";
+  } finally {
+    cicloAttivo = false;
   }
 }
 ciclo().then(aggiornaInterruzioni);
